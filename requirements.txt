@@ -1,0 +1,19 @@
+# LLM client
+openai>=1.0.0
+
+# QQ channel. The import name is `botpy`.
+qq-botpy>=1.2.1
+
+# Office / PDF parsing and generation
+pypdf>=4.0.0
+pdfplumber>=0.11.0
+openpyxl>=3.1.0
+python-docx>=1.1.0
+reportlab>=4.0.0
+pandas>=2.0.0
+defusedxml>=0.7.1
+lxml>=5.0.0
+
+# Optional browser automation tool. After installing, run:
+#   python -m playwright install chromium
+playwright>=1.40.0

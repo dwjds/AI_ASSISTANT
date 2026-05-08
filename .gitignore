@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime logs
+*.log
+botpy.log*
+
+# MiniAgent runtime data
+workspace/inbox/
+workspace/outbox/
+workspace/sessions/
+workspace/tmp/
+workspace/test_inputs/
+workspace/benchmarks/tmp/
+workspace/benchmarks/results/
+
+# Generated memory/runtime traces
+workspace/memory/*.jsonl
+workspace/memory/MEMORY.md
+workspace/memory/HISTORY.md
+workspace/skills/skill_trace.jsonl
+
+# Temporary smoke-test artifacts
+.tmp_smoke/
+
