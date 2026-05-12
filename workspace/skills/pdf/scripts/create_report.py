@@ -8,7 +8,12 @@ from typing import Any
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+
+PDF_FONT = "STSong-Light"
 
 
 def main() -> int:
@@ -48,7 +53,10 @@ def create_report(
         content = content_file.expanduser().resolve().read_text(encoding="utf-8")
     rows = load_table_rows(table_json) if table_json is not None else []
 
+    pdfmetrics.registerFont(UnicodeCIDFont(PDF_FONT))
     styles = getSampleStyleSheet()
+    for style in styles.byName.values():
+        style.fontName = PDF_FONT
     story = [Paragraph(escape_text(title), styles["Title"]), Spacer(1, 12)]
     for paragraph in split_paragraphs(content):
         story.append(Paragraph(escape_text(paragraph), styles["BodyText"]))
@@ -58,6 +66,7 @@ def create_report(
         table.setStyle(
             TableStyle(
                 [
+                    ("FONTNAME", (0, 0), (-1, -1), PDF_FONT),
                     ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
                     ("VALIGN", (0, 0), (-1, -1), "TOP"),

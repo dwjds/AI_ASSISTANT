@@ -25,19 +25,23 @@ class SkillLoader:
         workspace: Path,
         builtin_dir: Path | None = None,
         *,
+        runtime_workspace: Path | None = None,
+        trace_sink: Any | None = None,
         route_mode: str = SKILL_ROUTE_MODE,
         llm_client: Any = client,
         model: str = MODEL,
     ):
         self.workspace = workspace
+        self.runtime_workspace = runtime_workspace or workspace
+        self.trace_sink = trace_sink
         self.workspace_skills = workspace / "skills"
         self.builtin_skills = builtin_dir
         self.scanner = SkillScanner(self.workspace_skills, self.builtin_skills)
         self.registry = SkillRegistry(self.scanner)
         self.router = SkillRouter(mode=route_mode, llm_client=llm_client, model=model)
         self.policy = SkillPolicyEngine()
-        self.runtime = SkillRuntime(self.registry, workspace)
-        self.trace = SkillTraceLogger(workspace)
+        self.runtime = SkillRuntime(self.registry, self.runtime_workspace)
+        self.trace = SkillTraceLogger(self.runtime_workspace)
 
     def list_skills(self) -> list[dict[str, Any]]:
         return [skill.to_dict() for skill in self.registry.list_skills()]
@@ -78,16 +82,24 @@ class SkillLoader:
         )
         skills = [decision.skill for decision in decisions]
         if trace_activation and skills:
-            self.trace.log(
-                {
-                    "kind": "skill_activation",
-                    "status": "selected",
-                    "route_status": self.router.last_route_status,
-                    "skills": [skill.name for skill in skills],
-                    "route": [decision.to_trace() for decision in decisions],
-                    "user_message_preview": (user_message or "")[:300],
-                }
-            )
+            event = {
+                "kind": "skill_activation",
+                "status": "selected",
+                "route_status": self.router.last_route_status,
+                "skills": [skill.name for skill in skills],
+                "route": [decision.to_trace() for decision in decisions],
+                "user_message_preview": (user_message or "")[:300],
+            }
+            self.trace.log(event)
+            if self.trace_sink is not None:
+                self.trace_sink.write(
+                    "skill_activation",
+                    status=event["status"],
+                    route_status=event["route_status"],
+                    skills=event["skills"],
+                    route=event["route"],
+                    user_message_preview=event["user_message_preview"],
+                )
         for skill in skills:
             path = skill.path
             try:
@@ -170,6 +182,22 @@ class SkillLoader:
             return ""
 
         return "\n".join(self.policy.build_runtime_lines(documents, outbox_dir=outbox_dir))
+
+    def select_script_skill_names(
+        self,
+        user_message: str | None = None,
+        attachments: list[Any] | None = None,
+    ) -> list[str]:
+        documents = self.load_skill_documents(
+            user_message=user_message,
+            attachments=attachments,
+            trace_activation=False,
+        )
+        return [
+            str(doc["name"])
+            for doc in documents
+            if str(doc.get("scripts_dir") or "").strip()
+        ]
 
     def _select_skills(
         self,

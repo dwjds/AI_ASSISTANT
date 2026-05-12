@@ -118,7 +118,9 @@ async def main(argv: list[str] | None = None):
         raise SystemExit(await benchmark_main(raw_args[1:]))
     args = parse_channel_args(argv)
     channel_names = [item.strip() for item in args.channels.split(",") if item.strip()]
-    await run_selected_channels(channel_names)
+    from miniagent_core.harness import MiniAgentHarness
+
+    await MiniAgentHarness().run_live(channel_names)
 
 
 if __name__ == "__main__":

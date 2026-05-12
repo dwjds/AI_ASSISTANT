@@ -40,7 +40,7 @@ workspace/memory/*.jsonl
 workspace/memory/MEMORY.md
 workspace/memory/HISTORY.md
 workspace/skills/skill_trace.jsonl
+workspace/traces/
 
 # Temporary smoke-test artifacts
 .tmp_smoke/
-

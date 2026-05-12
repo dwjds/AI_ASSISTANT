@@ -1,0 +1,306 @@
+{
+  "memory_items": [
+    {
+      "id": "profile_identity",
+      "type": "profile",
+      "topic": "user identity",
+      "summary": "用户姓名为小明，偏好简洁、专业、技术导向的中文交流。",
+      "keywords": ["小明", "偏好", "技术中文", "简洁"],
+      "confidence": 0.95
+    },
+    {
+      "id": "project_root",
+      "type": "project",
+      "topic": "project environment",
+      "summary": "MiniAgent 项目根目录位于 D:\\VScode\\project\\Agent\\AI_assistant，工作区目录为 workspace。",
+      "keywords": ["项目根目录", "workspace", "AI_assistant"],
+      "confidence": 0.95
+    },
+    {
+      "id": "runtime_harness",
+      "type": "project",
+      "topic": "runtime harness",
+      "summary": "Harness 是 MiniAgent 的项目级运行控制层，统一装配 app、tools、skills、memory、sessions、attachments 和 TraceSink。",
+      "keywords": ["harness", "runtime", "TraceSink", "装配"],
+      "confidence": 0.95
+    },
+    {
+      "id": "isolated_eval",
+      "type": "project",
+      "topic": "isolated evaluation",
+      "summary": "harness eval --isolated 会复用真实 project workspace 的 skills 和 prompt 文件，但把运行状态写入 workspace/benchmarks/tmp/<run_id>/<task_id>。",
+      "keywords": ["isolated", "eval", "tmp", "workspace", "隔离"],
+      "confidence": 0.9
+    },
+    {
+      "id": "runtime_trace",
+      "type": "tooling",
+      "topic": "runtime trace",
+      "summary": "runtime_trace.jsonl 记录 llm_request、llm_response、tool_call、tool_result、memory_retrieval、skill_activation、output_artifact、file_created、turn_completed 等事件。",
+      "keywords": ["runtime_trace", "llm_request", "tool_result", "output_artifact"],
+      "confidence": 0.95
+    },
+    {
+      "id": "replay_trace",
+      "type": "tooling",
+      "topic": "deterministic replay",
+      "summary": "Harness replay 基于 runtime_trace.jsonl 做 deterministic replay，不重新调用 LLM，也不重新执行真实工具。",
+      "keywords": ["replay", "deterministic", "runtime_trace", "LLM", "工具"],
+      "confidence": 0.9
+    },
+    {
+      "id": "regression_compare",
+      "type": "tooling",
+      "topic": "regression compare",
+      "summary": "Harness compare 对比两次 JSON report，输出 success_rate、passed、failed、avg_steps、avg_tool_calls 和 failure_types 的变化。",
+      "keywords": ["compare", "regression", "success_rate", "failure_types"],
+      "confidence": 0.9
+    },
+    {
+      "id": "skill_runtime",
+      "type": "tooling",
+      "topic": "skill runtime",
+      "summary": "当前 skill runtime 使用 run_skill_script 统一执行 workspace/skills/<skill>/scripts 下的 Python 脚本，并记录 skill_trace.jsonl。",
+      "keywords": ["skill", "runtime", "run_skill_script", "skill_trace"],
+      "confidence": 0.95
+    },
+    {
+      "id": "skill_activation",
+      "type": "fact",
+      "topic": "skill activation meaning",
+      "summary": "skill_activation 只表示某个 skill 被路由选中并注入说明，不代表该 skill 的脚本已经被执行。",
+      "keywords": ["skill_activation", "selected", "脚本", "执行"],
+      "confidence": 0.9
+    },
+    {
+      "id": "actions_contract",
+      "type": "workflow",
+      "topic": "skill action contract",
+      "summary": "actions.json 是给 runtime 读取的 action contract，用来声明可自动执行的单步动作、输入扩展名、输出文件、脚本路径和参数模板。",
+      "keywords": ["actions.json", "action contract", "输入", "输出", "脚本路径"],
+      "confidence": 0.92
+    },
+    {
+      "id": "script_gate",
+      "type": "workflow",
+      "topic": "script execution gate",
+      "summary": "当命中脚本型 skill 且本轮需要脚本时，runtime 会设置 tool_choice=run_skill_script；如果模型仍不调用工具，会记录 script_tool_violation 并重试。",
+      "keywords": ["tool_choice", "run_skill_script", "script_tool_violation", "脚本门禁"],
+      "confidence": 0.95
+    },
+    {
+      "id": "output_gate",
+      "type": "workflow",
+      "topic": "output artifact gate",
+      "summary": "用户要求保存、导出或修改文件时，runtime 必须看到真实 output_artifact 或 file_created，否则会触发 output_violation。",
+      "keywords": ["output_artifact", "file_created", "output_violation", "保存", "导出"],
+      "confidence": 0.95
+    },
+    {
+      "id": "file_grounding_gate",
+      "type": "workflow",
+      "topic": "file grounding gate",
+      "summary": "本轮请求涉及附件内容时，runtime 必须获得 read_uploaded_file、read_file、run_skill_script 或 runtime preload 的文件证据。",
+      "keywords": ["file grounding", "read_uploaded_file", "runtime preload", "附件"],
+      "confidence": 0.95
+    },
+    {
+      "id": "xlsx_workflow",
+      "type": "workflow",
+      "topic": "xlsx file processing",
+      "summary": "用户常用 Excel workflow：筛选研究内容包含 AI 且需求专业包含软件工程的课题，并输出新的 xlsx 文件。",
+      "keywords": ["xlsx", "Excel", "AI", "软件工程", "筛选"],
+      "confidence": 0.9
+    },
+    {
+      "id": "xlsx_formula_recalc",
+      "type": "workflow",
+      "topic": "xlsx formula recalculation",
+      "summary": "Excel 公式、汇总、计算任务交付前应调用 xlsx/scripts/recalc.py 重算；如果返回 errors_found，不能声称文件完全成功。",
+      "keywords": ["Excel", "公式", "recalc.py", "errors_found", "汇总"],
+      "confidence": 0.9
+    },
+    {
+      "id": "weather_skill",
+      "type": "workflow",
+      "topic": "weather skill",
+      "summary": "天气查询应优先通过 weather/scripts/query_weather.py 执行，而不是直接编造天气或拼 curl 命令。",
+      "keywords": ["天气", "weather", "query_weather.py", "run_skill_script"],
+      "confidence": 0.9
+    },
+    {
+      "id": "docx_generation",
+      "type": "workflow",
+      "topic": "docx generation",
+      "summary": "简单 Word 文档可以通过 save_outbox_file 生成 docx，但这种方式不会产生 docx skill_script trace。",
+      "keywords": ["docx", "Word", "save_outbox_file", "skill_script", "trace"],
+      "confidence": 0.85
+    },
+    {
+      "id": "pdf_actions",
+      "type": "workflow",
+      "topic": "pdf actions",
+      "summary": "PDF 的合并、抽页和旋转属于 actions.json 可自动执行动作，通常通过 pdf/scripts/pdf_ops.py 运行。",
+      "keywords": ["PDF", "合并", "抽页", "旋转", "pdf_ops.py", "actions.json"],
+      "confidence": 0.88
+    },
+    {
+      "id": "attachment_index_gap",
+      "type": "project",
+      "topic": "attachment visibility",
+      "summary": "当前附件可见性依赖本轮附件、session 中保留的附件记录以及 inbox/outbox 搜索，session 裁剪后旧附件需要独立 attachment index 才能稳定找回。",
+      "keywords": ["附件", "session", "attachment index", "inbox", "outbox"],
+      "confidence": 0.9
+    },
+    {
+      "id": "memory_store_source",
+      "type": "tooling",
+      "topic": "memory retrieval source",
+      "summary": "长期记忆检索以 memory_store.jsonl 为唯一事实源，按 query embedding 召回 top_k，再结合关键词、topic 和 confidence 重排。",
+      "keywords": ["memory_store", "embedding", "rerank", "top_k", "confidence"],
+      "confidence": 0.95
+    }
+  ],
+  "queries": [
+    {
+      "id": "q_identity",
+      "query": "你记得我的名字和沟通偏好吗？",
+      "relevant_ids": ["profile_identity"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_project_root",
+      "query": "当前项目根目录和 workspace 是什么关系？",
+      "relevant_ids": ["project_root"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_runtime_harness",
+      "query": "Harness 在 MiniAgent 里负责统一装配哪些 runtime components？",
+      "relevant_ids": ["runtime_harness"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_isolated_eval",
+      "query": "harness eval --isolated 隔离的到底是什么？",
+      "relevant_ids": ["isolated_eval"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_runtime_trace",
+      "query": "runtime_trace.jsonl 会记录哪些关键事件？",
+      "relevant_ids": ["runtime_trace"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_replay",
+      "query": "replay 会重新执行 LLM 和工具吗？",
+      "relevant_ids": ["replay_trace"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_regression",
+      "query": "Harness compare 主要对比哪些评测指标？",
+      "relevant_ids": ["regression_compare"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_skill_runtime",
+      "query": "当前 skill runtime 是怎么执行脚本并记录日志的？",
+      "relevant_ids": ["skill_runtime"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_skill_activation",
+      "query": "trace 里出现 skill_activation selected 是否代表脚本已经执行？",
+      "relevant_ids": ["skill_activation"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_actions_contract",
+      "query": "actions.json 在 skill 系统里负责声明什么？",
+      "relevant_ids": ["actions_contract"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_script_gate",
+      "query": "模型不调用 run_skill_script 时 runtime 应该怎么拦截？",
+      "relevant_ids": ["script_gate"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_output_gate",
+      "query": "为什么模型声称文件已保存但没有真实文件时会被拦住？",
+      "relevant_ids": ["output_gate"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_file_grounding",
+      "query": "涉及附件内容的问题为什么必须先有文件读取证据？",
+      "relevant_ids": ["file_grounding_gate"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_xlsx_workflow",
+      "query": "我之前处理 Excel 里 AI 和软件工程课题的流程是什么？",
+      "relevant_ids": ["xlsx_workflow"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_xlsx_recalc",
+      "query": "Excel 公式和汇总任务交付前为什么要运行 recalc.py？",
+      "relevant_ids": ["xlsx_formula_recalc"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_weather",
+      "query": "天气查询应该调用哪个 skill 脚本？",
+      "relevant_ids": ["weather_skill"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_docx_trace",
+      "query": "为什么生成 Word 后 trace 里可能没有 docx script success？",
+      "relevant_ids": ["docx_generation"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_pdf_actions",
+      "query": "PDF 合并、抽页、旋转这些动作应该通过哪个脚本自动执行？",
+      "relevant_ids": ["pdf_actions"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_attachment_visibility",
+      "query": "为什么 session 裁剪后可能找不到以前上传的附件？",
+      "relevant_ids": ["attachment_index_gap"],
+      "top_k": 4,
+      "candidate_pool": 8
+    },
+    {
+      "id": "q_memory_source",
+      "query": "长期记忆检索的唯一事实源是什么，排序时看哪些因素？",
+      "relevant_ids": ["memory_store_source"],
+      "top_k": 4,
+      "candidate_pool": 8
+    }
+  ]
+}

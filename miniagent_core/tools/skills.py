@@ -5,7 +5,25 @@ from typing import Any
 from ..skills import SkillLoader
 from .base import Tool
 
+"""
+替代让 LLM 自己用通用 exec/shell/python 去拼命令执行 skill script
 
+run_skill_script 方法：
+LLM 只声明“我要运行哪个 skill 的哪个 script,并传什么参数”,
+真正的路径解析、权限检查、执行方式、stdout/stderr/return code 处理由 Harness 统一完成。
+
+旧方法偏“让模型操作命令行”
+新方法偏“让模型调用一个受控的脚本运行接口”
+
+结构化参数
+路径受控
+权限受控
+执行结果统一
+trace 清晰
+失败恢复精确
+可以被 Harness 强制调用
+更适合 replay 和 benchmark
+"""
 class RunSkillScriptTool(Tool):
     """统一执行 skill 目录内脚本的工具。"""
 

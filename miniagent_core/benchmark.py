@@ -9,11 +9,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .app import agent_loop, build_default_tools
 from .attachments import Attachment, AttachmentStore
 from .config import EMBEDDING_MODEL, MODEL, WORKSPACE, client
-from .memory import ContextBuilder, MemoryItem, MemoryStore, _memory_item_id
-from .skills import SkillLoader
+from .harness.trace import ToolEvent, classify_tool_failure
+from .memory import MemoryItem, MemoryStore, _memory_item_id
 
 
 DEFAULT_TASKS_FILE = WORKSPACE / "benchmarks" / "tasks.json"
@@ -29,22 +28,13 @@ class BenchmarkTask:
     prompt: str
     attachments: list[dict[str, str]] = field(default_factory=list)
     expected_reply_contains: list[str] = field(default_factory=list)
+    expected_reply_contains_any: list[str] = field(default_factory=list)
     expected_tools_all: list[str] = field(default_factory=list)
     expected_tools_any: list[str] = field(default_factory=list)
     expected_outbox_suffixes: list[str] = field(default_factory=list)
     expected_outbox_files: list[dict[str, Any]] = field(default_factory=list)
     expected_max_tool_calls: int | None = None
     max_iterations: int = 10
-
-
-@dataclass
-class ToolEvent:
-    tool: str
-    params: dict[str, Any]
-    duration_seconds: float
-    failed: bool
-    failure_type: str = ""
-    result_preview: str = ""
 
 
 @dataclass
@@ -85,51 +75,6 @@ class MemoryRetrievalResult:
     top_k: int
 
 
-class InstrumentedToolRegistry:
-    """Wrap a ToolRegistry and collect tool-call metrics for benchmark runs."""
-
-    def __init__(self, base: Any):
-        self.base = base
-        self.events: list[ToolEvent] = []
-
-    def get_definitions(self) -> list[dict[str, Any]]:
-        return self.base.get_definitions()
-
-    async def execute(self, name: str, params: dict[str, Any]) -> str:
-        start = time.perf_counter()
-        result = await self.base.execute(name, params)
-        duration = time.perf_counter() - start
-        failed, failure_type = classify_tool_failure(name, result)
-        self.events.append(
-            ToolEvent(
-                tool=name,
-                params=params,
-                duration_seconds=round(duration, 4),
-                failed=failed,
-                failure_type=failure_type,
-                result_preview=str(result or "")[:500],
-            )
-        )
-        return result
-
-
-def classify_tool_failure(tool_name: str, result: str) -> tuple[bool, str]:
-    text = str(result or "")
-    if text.startswith("Error:"):
-        if "Skill script not found" in text:
-            return True, "skill_script_not_found"
-        if "Tool '" in text and "not found" in text:
-            return True, "tool_not_found"
-        if "invalid tool arguments" in text:
-            return True, "invalid_tool_arguments"
-        return True, "tool_error"
-    if tool_name == "run_skill_script" and "Return code:" in text and "Return code: 0" not in text:
-        if "Skill script not found" in text:
-            return True, "skill_script_not_found"
-        return True, "skill_script_nonzero"
-    return False, ""
-
-
 def classify_loop_error(error: str) -> str:
     lowered = str(error or "").lower()
     if "permissiondenied" in lowered or "403" in lowered or "quota" in lowered:
@@ -146,20 +91,30 @@ async def run_benchmark(
     tasks_file: Path = DEFAULT_TASKS_FILE,
     results_dir: Path = DEFAULT_RESULTS_DIR,
     limit: int | None = None,
+    delay_seconds: float = 3.0,
     model: str = MODEL,
+    harness: Any | None = None,
 ) -> dict[str, Any]:
     ensure_default_benchmark_files(tasks_file)
     tasks = load_tasks(tasks_file)
     if limit is not None:
         tasks = tasks[: max(0, limit)]
 
+    if harness is None:
+        from miniagent_core.harness import HarnessConfig, MiniAgentHarness
+
+        harness = MiniAgentHarness(HarnessConfig(model=model))
+
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_dir.mkdir(parents=True, exist_ok=True)
     task_results: list[BenchmarkResult] = []
 
     for index, task in enumerate(tasks, start=1):
+        if index > 1 and delay_seconds > 0:
+            print(f"[Benchmark] Waiting {delay_seconds:g}s before next task...")
+            await asyncio.sleep(delay_seconds)
         print(f"[Benchmark] ({index}/{len(tasks)}) {task.id}: {task.prompt}")
-        result = await run_task(task, run_id=run_id, model=model)
+        result = await run_task(task, run_id=run_id, model=model, harness=harness)
         task_results.append(result)
         status = "PASS" if result.success else "FAIL"
         print(
@@ -187,73 +142,64 @@ async def run_benchmark(
     return report
 
 
-async def run_task(task: BenchmarkTask, *, run_id: str, model: str) -> BenchmarkResult:
+async def run_task(
+    task: BenchmarkTask,
+    *,
+    run_id: str,
+    model: str,
+    harness: Any | None = None,
+) -> BenchmarkResult:
     start = time.perf_counter()
-    session_key = f"benchmark:{run_id}:{task.id}"
-    store = AttachmentStore(WORKSPACE)
-    skill_loader = SkillLoader(WORKSPACE)
-    ctx = ContextBuilder(WORKSPACE, skill_loader=skill_loader)
-    attachments = prepare_task_attachments(task, store, run_id=run_id)
-    before_outbox = set(list_outbox_paths(store, session_key))
+    if harness is None:
+        from miniagent_core.harness import HarnessConfig, MiniAgentHarness
 
+        harness = MiniAgentHarness(HarnessConfig(model=model))
+
+    session = harness.build_eval_session(
+        run_id=run_id,
+        task_id=task.id,
+    )
+    store = session.components.attachment_store
+    attachments = prepare_task_attachments(task, store, run_id=run_id)
     prompt_content = build_task_prompt(task.prompt, attachments, store)
-    runtime_skill_note = skill_loader.build_runtime_note(
-        prompt_content,
-        outbox_dir=store.outbox_session_dir(session_key),
-        attachments=attachments,
-    )
-    messages = ctx.build_messages(
-        [],
+
+    turn = await session.run_turn(
         prompt_content,
         attachments=attachments,
-        extra_system_notes=[runtime_skill_note] if runtime_skill_note else None,
+        max_iterations=task.max_iterations,
     )
-    base_tools = build_default_tools(
-        llm_client=client,
-        model=model,
-        attachment_store=store,
-        session_key=session_key,
-        inbound_attachments=attachments,
-        session_attachments=[],
-        skill_loader=skill_loader,
-        workspace=WORKSPACE,
+    failure_types = evaluate_task(
+        task,
+        turn.reply,
+        turn.tool_events,
+        turn.new_outbox_files,
+        turn.metrics,
     )
-    tools = InstrumentedToolRegistry(base_tools)
-    metrics: dict[str, Any] = {}
-    loop_error = ""
-    try:
-        reply = await agent_loop(
-            client=client,
-            model=model,
-            messages=messages,
-            tools=tools,  # type: ignore[arg-type]
-            max_iterations=task.max_iterations,
-            metrics=metrics,
-        )
-    except Exception as exc:
-        loop_error = f"{type(exc).__name__}: {exc}"
-        reply = f"Error: {loop_error}"
-        metrics["finish_reason"] = "agent_loop_error"
-    after_outbox = list_outbox_paths(store, session_key)
-    new_outbox = [path for path in after_outbox if path not in before_outbox]
-    failure_types = evaluate_task(task, reply, tools.events, new_outbox, metrics)
-    if loop_error:
-        failure_types = dedupe([*failure_types, classify_loop_error(loop_error)])
+    if turn.loop_error:
+        failure_types = dedupe([*failure_types, classify_loop_error(turn.loop_error)])
     duration = time.perf_counter() - start
+    session.components.trace_sink.write(
+        "judge_result",
+        task_id=task.id,
+        category=task.category,
+        success=not failure_types,
+        failure_types=failure_types,
+        duration_seconds=round(duration, 4),
+    )
     return BenchmarkResult(
         task_id=task.id,
         category=task.category,
         success=not failure_types,
         failure_types=failure_types,
-        reply_preview=str(reply or "")[:1000],
-        tool_call_count=int(metrics.get("tool_calls", len(tools.events))),
-        tool_call_batches=int(metrics.get("tool_call_batches", 0)),
-        steps=int(metrics.get("iterations", 0)),
+        reply_preview=str(turn.reply or "")[:1000],
+        tool_call_count=int(turn.metrics.get("tool_calls", len(turn.tool_events))),
+        tool_call_batches=int(turn.metrics.get("tool_call_batches", 0)),
+        steps=int(turn.metrics.get("iterations", 0)),
         duration_seconds=round(duration, 4),
-        tool_names=[event.tool for event in tools.events],
-        outbox_files=new_outbox,
-        finish_reason=str(metrics.get("finish_reason", "")),
-        tool_events=tools.events,
+        tool_names=[event.tool for event in turn.tool_events],
+        outbox_files=turn.new_outbox_files,
+        finish_reason=str(turn.metrics.get("finish_reason", "")),
+        tool_events=turn.tool_events,
     )
 
 
@@ -294,27 +240,6 @@ def prepare_task_attachments(task: BenchmarkTask, store: AttachmentStore, *, run
     return attachments
 
 
-def list_outbox_paths(store: AttachmentStore, session_key: str) -> list[str]:
-    paths: list[str] = []
-    seen: set[str] = set()
-    for item in store.list_session_outbox(session_key):
-        normalized = str(Path(item.path).expanduser().resolve())
-        if normalized not in seen:
-            seen.add(normalized)
-            paths.append(normalized)
-    session_dir = store.outbox_session_dir(session_key)
-    if session_dir.exists():
-        for path in session_dir.rglob("*"):
-            if not path.is_file() or path.name == "manifest.json":
-                continue
-            normalized = str(path.expanduser().resolve())
-            if normalized in seen:
-                continue
-            seen.add(normalized)
-            paths.append(normalized)
-    return paths
-
-
 def evaluate_task(
     task: BenchmarkTask,
     reply: str,
@@ -340,6 +265,11 @@ def evaluate_task(
         if str(expected).lower() not in reply_lower:
             failure_types.append("missing_expected_reply")
             break
+
+    if task.expected_reply_contains_any and not any(
+        str(expected).lower() in reply_lower for expected in task.expected_reply_contains_any
+    ):
+        failure_types.append("missing_expected_reply")
 
     for expected_tool in task.expected_tools_all:
         if expected_tool not in tool_names:
@@ -1018,6 +948,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--tasks", type=Path, default=DEFAULT_TASKS_FILE, help="Benchmark task JSON file.")
     parser.add_argument("--limit", type=int, default=None, help="Run only the first N tasks.")
+    parser.add_argument("--delay", type=float, default=3.0, help="Seconds to wait between agent eval tasks. Use 0 to disable.")
     parser.add_argument("--json", action="store_true", help="Print full JSON report.")
     return parser
 
@@ -1030,7 +961,11 @@ async def async_main(argv: list[str] | None = None) -> int:
     if args.suite == "memory":
         report = await run_memory_retrieval_benchmark(tasks_file=tasks_file)
     else:
-        report = await run_benchmark(tasks_file=tasks_file, limit=args.limit)
+        report = await run_benchmark(
+            tasks_file=tasks_file,
+            limit=args.limit,
+            delay_seconds=max(0.0, args.delay),
+        )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:

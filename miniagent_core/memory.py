@@ -379,9 +379,15 @@ class ContextBuilder:
         ),
     }
 
-    def __init__(self, workspace: Path, skill_loader: SkillLoader | None = None):
+    def __init__(
+        self,
+        workspace: Path,
+        skill_loader: SkillLoader | None = None,
+        bootstrap_workspace: Path | None = None,
+    ):
         self.workspace = workspace
         self.skill_loader = skill_loader
+        self.bootstrap_workspace = bootstrap_workspace or workspace
 
     def build_system_prompt(
         self,
@@ -395,13 +401,16 @@ class ContextBuilder:
             f"长期记忆总览视图：{self.workspace}/memory/MEMORY.md\n"
             f"结构化长期记忆主库：{self.workspace}/memory/memory_store.jsonl\n"
             f"结构化历史摘要日志：{self.workspace}/memory/history.jsonl\n"
-            "记忆检索只以 `memory_store.jsonl` 为事实源，不直接整份注入 `MEMORY.md`。"
+            "记忆检索只以 `memory_store.jsonl` 为事实源，不直接整份注入 `MEMORY.md`。\n"
+            "默认回复要像聊天，不要写成报告或 Markdown 文档。"
+            "少用 `###`、`---`、过度加粗和装饰符号；除非用户要求表格、代码或正式文档，"
+            "否则用自然段和很短的列表即可。"
         ]
         policy_sections = self._build_policy_sections(user_message or "")
         if policy_sections:
             parts.append("\n\n".join(policy_sections))
         for filename in self.BOOTSTRAP_FILES:
-            path = self.workspace / filename
+            path = self.bootstrap_workspace / filename
             if path.exists():
                 parts.append(f"## {filename}\n\n{path.read_text(encoding='utf-8')}")
 
@@ -430,7 +439,7 @@ class ContextBuilder:
                 "`list_uploaded_files` 和 `read_uploaded_file`；"
                 "需要生成交付物时，使用 `save_outbox_file` 保存到 workspace/outbox。"
                 "除非用户明确要求全文、原文或完整表格，否则默认只给简短摘要和关键结论，"
-                "不要大段复述文件内容。"
+                "不要大段复述文件内容。回复风格保持聊天化，不要使用报告式标题、分隔线或大量加粗。"
             )
         system_notes = [
             {"role": "system", "content": self.build_system_prompt(user_message, attachments=attachments)},
@@ -734,6 +743,7 @@ class MemoryStore:
         embedding_model: str,
         top_k: int,
         candidate_pool: int,
+        trace_sink: Any | None = None,
     ) -> str:
         items = await self.retrieve_relevant_memory(
             query,
@@ -742,6 +752,18 @@ class MemoryStore:
             top_k=top_k,
             candidate_pool=candidate_pool,
         )
+        if trace_sink is not None:
+            try:
+                trace_sink.write(
+                    "memory_retrieval",
+                    query=query,
+                    top_k=top_k,
+                    candidate_pool=candidate_pool,
+                    retrieved_ids=[item.id for item in items],
+                    hit=bool(items),
+                )
+            except Exception as exc:
+                print(f"[Trace] Failed to write memory_retrieval: {exc}")
         if not items:
             return ""
         lines = ["# Relevant Memory"]

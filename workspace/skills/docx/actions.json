@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "name": "accept_tracked_changes",
+      "description": "Accept all tracked changes in a visible DOCX and save a clean copy to the current session outbox.",
+      "auto_execute": true,
+      "requires_output_file": true,
+      "intent_hints_any": ["接受修订", "清除修订", "去掉修订", "删除修订", "accept changes", "tracked changes"],
+      "input_extensions": [".docx"],
+      "output_extension": ".docx",
+      "output_filename_template": "{input_stem}_accepted.docx",
+      "tool": "run_skill_script",
+      "skill_name": "docx",
+      "script_path": "scripts/accept_changes.py",
+      "arguments": ["{input_path}", "{output_path}"],
+      "timeout_seconds": 60
+    }
+  ]
+}

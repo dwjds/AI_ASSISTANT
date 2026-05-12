@@ -1,0 +1,112 @@
+{
+  "tasks": [
+    {
+      "id": "flow_01_chat_no_tool",
+      "category": "flow_chat",
+      "prompt": "请只回答：Harness smoke ok",
+      "expected_reply_contains": [
+        "Harness smoke ok"
+      ],
+      "expected_max_tool_calls": 0,
+      "max_iterations": 3
+    },
+    {
+      "id": "flow_02_attachment_read",
+      "category": "flow_attachment",
+      "prompt": "读取这个文本文件并用一句话说明它和 MiniAgent 的关系。",
+      "attachments": [
+        {
+          "fixture": "miniagent_notes.txt",
+          "filename": "miniagent_notes.txt",
+          "content_type": "text/plain"
+        }
+      ],
+      "expected_reply_contains": [
+        "MiniAgent"
+      ],
+      "expected_tools_any": [
+        "read_uploaded_file"
+      ],
+      "max_iterations": 6
+    },
+    {
+      "id": "flow_03_outbox_text",
+      "category": "flow_outbox",
+      "prompt": "生成一个 Markdown 文件保存到 outbox，文件名为 harness_flow.md，内容必须包含 Harness Flow Check 和 runtime trace。",
+      "expected_tools_all": [
+        "save_outbox_file"
+      ],
+      "expected_outbox_suffixes": [
+        ".md"
+      ],
+      "expected_outbox_files": [
+        {
+          "suffix": ".md",
+          "contains_all": [
+            "Harness Flow Check",
+            "runtime trace"
+          ]
+        }
+      ],
+      "max_iterations": 6
+    },
+    {
+      "id": "flow_04_xlsx_skill_or_outbox",
+      "category": "flow_skill_xlsx",
+      "prompt": "筛选这个 Excel 中专业包含软件工程且研究内容包含 AI 或大模型的项目，保存为新的 Excel 文件。",
+      "attachments": [
+        {
+          "fixture": "research_projects.xlsx",
+          "filename": "research_projects.xlsx",
+          "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+      ],
+      "expected_tools_any": [
+        "run_skill_script",
+        "save_outbox_file"
+      ],
+      "expected_outbox_suffixes": [
+        ".xlsx"
+      ],
+      "expected_outbox_files": [
+        {
+          "suffix": ".xlsx",
+          "contains_all": [
+            "AI 代码审查平台",
+            "车载 LLM 安全"
+          ],
+          "not_contains": [
+            "传感器结构设计",
+            "数据治理工具"
+          ],
+          "min_rows": 3,
+          "max_rows": 4
+        }
+      ],
+      "max_iterations": 10
+    },
+    {
+      "id": "flow_05_docx_generation",
+      "category": "flow_docx",
+      "prompt": "生成一份 Word 文档保存，标题为 Harness Flow Report，正文必须包含 deterministic replay 和 regression compare。",
+      "expected_tools_any": [
+        "save_outbox_file",
+        "run_skill_script"
+      ],
+      "expected_outbox_suffixes": [
+        ".docx"
+      ],
+      "expected_outbox_files": [
+        {
+          "suffix": ".docx",
+          "contains_all": [
+            "Harness Flow Report",
+            "deterministic replay",
+            "regression compare"
+          ]
+        }
+      ],
+      "max_iterations": 8
+    }
+  ]
+}

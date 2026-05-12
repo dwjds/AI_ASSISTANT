@@ -1,334 +1,201 @@
-# MiniAgent：面向 QQBot 的文件处理与记忆增强 Agent
+# MiniAgent
 
-MiniAgent 是一个本地运行的 Agent 工程项目，目标是把“聊天机器人”升级为“能接收文件、调用工具、使用 skill、维护长期记忆、并可被 benchmark 评测的任务型 Agent”。
+MiniAgent 是一个本地运行的任务型 Agent 项目，面向 QQBot / CLI 场景，支持文件处理、工具调用、项目级 skill、长期记忆、runtime trace、评测、回放和回归比较。
 
-项目当前支持：
+当前版本的重点不是“让模型自由聊天”，而是把 Agent 放进一个可观测、可约束、可复现的工程运行层里：
 
 - CLI / QQBot 双通道运行。
-- QQ 文件接收、落盘到 `workspace/inbox/`，处理结果保存到 `workspace/outbox/`。
-- 解析和生成 `txt / docx / pdf / xlsx` 等文件。
-- 基于 skill 的按需能力加载，包括 `docx / pdf / xlsx / weather / code_navigation`。
-- 统一 `run_skill_script` 运行 skill 下脚本，并记录 `skill_trace.jsonl`。
-- 结构化长期记忆：`memory_store.jsonl` + embedding 相似度召回 + 规则 rerank。
-- Harness / Benchmark：统计成功率、工具调用次数、平均步数、失败类型，并支持文件内容精准验收和 Memory Retrieval Recall@K / MRR。
+- 上传文件落到 `workspace/inbox/`，生成文件落到 `workspace/outbox/`。
+- `docx / pdf / xlsx / weather / code_navigation` 项目级 skill。
+- 统一通过 `run_skill_script` 执行 skill 脚本。
+- `actions.json` 支持可自动执行的确定性 action，例如 Excel 转 PDF、PDF 合并/抽页/旋转、接受 Word 修订。
+- `TurnIntent` 集中判断本轮是否需要文件证据、输出产物或脚本执行，避免散落 prompt hint。
+- `RuntimeVerifier` / `RuntimeRecovery` 独立负责校验与恢复，不把假行为拦截全塞在 agent loop 里。
+- runtime 会记录 `llm_request`、`llm_response`、`tool_call`、`tool_result`、`memory_retrieval`、`skill_activation`、`output_artifact`、`file_created`、`turn_completed` 等 trace。
+- 对文件读取、输出文件、脚本执行有 runtime gate，防止模型假装读文件、假装保存文件、假装执行脚本。
+- Harness 支持 live runtime、isolated eval、deterministic replay 和 regression compare。
 
-> 当前项目更适合作为 Agent 工程设计与实验项目，而不是生产级多用户平台。QQ 多用户长期记忆隔离、附件索引、完整 workflow planner 等仍在后续迭代中。
-
-## 项目结构
+## Project Layout
 
 ```text
 AI_assistant/
-├── miniagent.py                  # 项目入口，支持 cli / qq / skills doctor / harness
-├── miniagent_core/               # 核心代码
-│   ├── app.py                    # Agent 主循环、工具调用、channel 装配、消息处理
-│   ├── async_compat.py           # 异步兼容工具，封装阻塞函数到线程执行
-│   ├── attachments.py            # inbox/outbox 文件管理，Office/PDF 读写
-│   ├── benchmark.py              # Benchmark / Harness 评测实现
-│   ├── channels.py               # CLIChannel / QQChannel
-│   ├── config.py                 # 模型、路径、记忆阈值、QQ channel 配置
-│   ├── memory.py                 # Session、长期记忆、consolidation、检索与 rerank
-│   ├── message.py                # InboundMessage / OutboundMessage / MessageBus
-│   ├── tools/                    # 基础工具系统
-│   │   ├── base.py               # Tool 抽象基类
-│   │   ├── registry.py           # ToolRegistry
-│   │   ├── files.py              # exec/read/write/find/search code
-│   │   ├── attachments.py        # list/read uploaded, save/list outbox
-│   │   ├── web.py                # web_search / web_fetch
-│   │   ├── browser.py            # Playwright 浏览器自动化工具
-│   │   └── skills.py             # run_skill_script 工具入口
-│   ├── skills/                   # Skill runtime 框架
-│   │   ├── scanner.py            # 扫描 workspace/skills
-│   │   ├── registry.py           # 注册 SkillRecord
-│   │   ├── router.py             # Hybrid Router：规则 + LLM 语义路由
-│   │   ├── loader.py             # 按需加载 SKILL.md
-│   │   ├── runtime.py            # 受控执行 skill scripts/*.py
-│   │   ├── policy.py             # Skill runtime 协议与 fallback policy
-│   │   ├── doctor.py             # skill health check
-│   │   └── README.md             # Skill 系统详细说明
-│   └── harness/                  # Harness 工程入口与说明
-│       ├── __init__.py
-│       └── README.md
-├── workspace/                    # Agent 工作区
-│   ├── AGENTS.md                 # Agent 行为说明，可被系统 prompt 读取
-│   ├── SOUL.md                   # Agent 角色/风格设定
-│   ├── USER.md                   # 用户偏好说明
-│   ├── skills/                   # 项目级 skill 包
-│   │   ├── code_navigation/
-│   │   ├── docx/
-│   │   ├── pdf/
-│   │   ├── weather/
-│   │   └── xlsx/
-│   ├── memory/
-│   │   └── README.md             # Memory 系统详细说明
-│   └── benchmarks/
-│       ├── README.md             # Harness / benchmark 说明
-│       ├── tasks.json            # Agent 端到端任务集
-│       ├── memory_retrieval_tasks.json
-│       └── fixtures/             # benchmark 输入样例文件
-├── PROJECT_QA.md                 # 项目开发过程问题复盘 QA
-├── smoke_test.py                 # 本地 smoke test
-├── requirements.txt              # Python 依赖
-├── .env.example                  # 环境变量示例
-├── .python-version               # 推荐 Python 版本
-└── .gitignore
+├── miniagent.py                  # 项目入口
+├── COMMANDS.md                   # 命令速查
+├── miniagent_core/
+│   ├── app.py                    # Agent loop、runtime gate、channel 处理
+│   ├── attachments.py            # inbox/outbox 与文件读写
+│   ├── benchmark.py              # benchmark suites 与 report
+│   ├── intent.py                 # TurnIntent 推断
+│   ├── memory.py                 # session、长期记忆、检索、consolidation
+│   ├── runtime_guards.py         # 文本/行为 guard 规则
+│   ├── runtime_verifier.py       # 最终回复事实校验
+│   ├── runtime_recovery.py       # 按错误类型重试/失败恢复
+│   ├── tools/                    # 基础工具与 run_skill_script
+│   ├── skills/                   # skill 扫描、路由、action planner、runtime
+│   └── harness/                  # 工程级 runtime/eval/trace/replay/regression
+└── workspace/
+    ├── AGENTS.md                 # Agent 行为说明
+    ├── SOUL.md                   # Agent 风格
+    ├── USER.md                   # 用户偏好
+    ├── skills/                   # 项目级 skill 包
+    ├── memory/                   # memory store 与说明
+    ├── benchmarks/               # eval tasks、fixtures、results
+    ├── inbox/                    # 用户上传文件，运行时生成
+    ├── outbox/                   # Agent 输出文件，运行时生成
+    ├── sessions/                 # 会话 jsonl，运行时生成
+    └── traces/                   # runtime_trace.jsonl，运行时生成
 ```
 
-## Runtime 目录说明
+## Install
 
-以下目录是运行时数据，默认不建议提交到 GitHub：
-
-```text
-workspace/inbox/                 # 用户上传文件
-workspace/outbox/                # Agent 生成结果文件
-workspace/sessions/              # 每个 channel/session 的短期会话 jsonl
-workspace/memory/*.jsonl         # 结构化长期记忆、历史摘要、trace
-workspace/memory/MEMORY.md       # 长期记忆人类可读视图
-workspace/memory/HISTORY.md      # 历史摘要人类可读视图
-workspace/skills/skill_trace.jsonl
-workspace/benchmarks/results/
-workspace/benchmarks/tmp/
-```
-
-这些路径已写入 `.gitignore`。
-
-## 环境要求
-
-推荐环境：
-
-- Python `3.11.x`，当前开发环境为 `3.11.15`。
-- Windows + PowerShell。
-- 可选：LibreOffice，用于 Excel 公式重算和 Office 转换。
-- 可选：Pandoc，用于部分 docx 高级转换流程。
-- 可选：Playwright 浏览器，用于浏览器自动化工具。
-
-## 安装步骤
-
-### 1. 克隆项目
-
-```powershell
-git clone <your-repo-url>
-cd AI_assistant
-```
-
-### 2. 创建 Python 3.11 环境
-
-示例使用 conda：
+推荐 Python 3.11。
 
 ```powershell
 conda create -n assistant python=3.11 -y
 conda activate assistant
-```
-
-或使用你自己的 Python 3.11 虚拟环境。
-
-### 3. 安装依赖
-
-```powershell
 python -m pip install -U pip
 python -m pip install -r requirements.txt
 ```
 
-如果需要浏览器自动化：
+可选依赖：
+
+- LibreOffice：Excel 公式重算、Office 转 PDF。
+- Pandoc：部分文档转换。
+- Playwright：浏览器自动化。
 
 ```powershell
 python -m playwright install chromium
-```
-
-如果需要 LibreOffice 相关能力，请安装 LibreOffice，并确保 `soffice` 在 `PATH` 中：
-
-```powershell
 soffice --version
 ```
 
-## 配置环境变量
+## Configuration
 
-项目使用 DashScope 的 OpenAI-compatible API：
+模型使用 DashScope OpenAI-compatible API：
 
 ```powershell
-$env:DASHSCOPE_API_KEY="你的 DashScope API Key"
+$env:DASHSCOPE_API_KEY="your-key"
 $env:DASHSCOPE_EMBEDDING_MODEL="text-embedding-v4"
 ```
 
-QQBot 通道需要配置：
+QQBot：
 
 ```powershell
 $env:QQ_BOT_ENABLED="true"
-$env:QQ_BOT_APP_ID="你的 QQBot AppID"
-$env:QQ_BOT_SECRET="你的 QQBot Secret"
-$env:QQ_BOT_ACK_MESSAGE="⏳ Processing..."
+$env:QQ_BOT_APP_ID="your-app-id"
+$env:QQ_BOT_SECRET="your-secret"
+$env:QQ_BOT_ACK_MESSAGE="Processing..."
 ```
 
-也可以参考 `.env.example` 自行管理环境变量。当前代码默认直接读取系统环境变量，不会自动加载 `.env` 文件。
-
-## 运行项目
-
-### CLI 模式
+## Run
 
 ```powershell
 python miniagent.py --channels cli
-```
-
-CLI 模式适合本地调试 Agent loop、工具调用、memory 和 skill 行为。
-
-### QQBot 模式
-
-```powershell
 python miniagent.py --channels qq
-```
-
-QQBot 模式会通过 `botpy` 连接 QQ 开放平台 WebSocket。收到 QQ 私聊消息后，消息会进入 MiniAgent 的 MessageBus，再交给 Agent loop 处理。
-
-### 同时开启 CLI 和 QQ
-
-```powershell
 python miniagent.py --channels cli,qq
 ```
 
-## 常用维护命令
-
-### Skill Health Check
+普通入口和 `harness run` 都会走同一套工程 runtime：
 
 ```powershell
-python miniagent.py skills doctor
+python miniagent.py harness run --channels cli
+python miniagent.py harness run --channels qq
 ```
 
-检查内容包括：
+更多命令见 [COMMANDS.md](COMMANDS.md)。
 
-- `workspace/skills` 是否存在。
-- `SKILL.md` 是否可读。
-- skill 中引用的脚本是否存在。
-- Python 脚本是否有语法错误。
-- `openpyxl / pypdf / pdfplumber / python-docx / reportlab` 等依赖是否可导入。
-- `soffice / pandoc` 等外部命令是否在 `PATH` 中。
+## Harness
 
-### Agent Harness
+Harness 是项目级运行控制层。它负责统一装配 app、tools、skills、memory、sessions、attachments、trace。
+
+常用命令：
 
 ```powershell
-python miniagent.py harness
-```
-
-统计：
-
-- 成功率
-- 工具调用次数
-- 平均 Agent loop 步数
-- 失败类型
-- outbox 产物
-- 文件内容精准验收
-
-### Memory Retrieval Harness
-
-```powershell
+python miniagent.py harness --help
+python miniagent.py harness eval --limit 3 --isolated
 python miniagent.py harness memory
+python miniagent.py harness replay --source workspace/traces/runtime_trace.jsonl
+python miniagent.py harness compare --base old.json --head new.json
 ```
 
-统计：
+详细说明见 [miniagent_core/harness/README.md](miniagent_core/harness/README.md)。
 
-- Recall@1
-- Recall@3
-- Recall@5
-- Recall@task_k
-- MRR
-- 每条 query 的命中 rank
+## Runtime Gates
 
-## 核心设计说明
+当前 Agent loop 不再完全相信模型自然语言承诺。它先用 `TurnIntent` 判断本轮目标，再由 `RuntimeVerifier` 根据真实工具结果校验，失败后交给 `RuntimeRecovery` 按错误类型重试或返回明确错误。
 
-### 1. Tool System
+- **File grounding gate**：本轮请求涉及附件内容时，必须有 `read_uploaded_file`、`read_file`、`run_skill_script` 或 runtime preload 证据。
+- **Output file gate**：用户要求保存/导出/修改文件时，必须有真实产物工具成功，例如 `save_outbox_file` 或返回 `Return code: 0` 的 `run_skill_script`。
+- **Script gate**：命中脚本型 skill 且任务需要脚本时，runtime 会设置 `tool_choice=run_skill_script`；如果模型仍返回 `tool_calls=[]`，会记录 `script_tool_violation` 并重试。
+- **Claim gate**：如果模型声称“已保存路径”但本轮没有文件产物，会记录 `output_violation` 并阻止最终回复。
+- **Completion gate**：如果工具调用后仍只回复“正在处理/下一步将”，会触发恢复，不把中间态当最终结果发给用户。
 
-基础工具位于 `miniagent_core/tools/`。
+这些 gate 的目标是减少“假装读文件 / 假装保存 / 假装执行脚本”。
 
-当前工具包括：
+## Skills
 
-- `exec`
-- `read_file`
-- `write_file`
-- `find_files`
-- `search_code`
-- `web_search`
-- `web_fetch`
-- `browser_automation`
-- `list_uploaded_files`
-- `read_uploaded_file`
-- `save_outbox_file`
-- `list_outbox_files`
-- `run_skill_script`
+项目级 skill 位于 `workspace/skills/<name>/`。
 
-所有工具通过 `ToolRegistry` 注册，并暴露给模型函数调用。
+当前内置 workspace skills：
 
-### 2. Skill Runtime
+| Skill | 主要能力 |
+| --- | --- |
+| `weather` | 天气查询，脚本 `scripts/query_weather.py` |
+| `xlsx` | Excel 读取、筛选、修改、公式重算、导出 PDF |
+| `pdf` | PDF 提取、合并、抽页、旋转、生成报告 |
+| `docx` | Word 读取、生成、修订处理、Office XML 校验 |
+| `code_navigation` | 代码/路径/项目文件定位 |
 
-Skill 目录位于 `workspace/skills/<skill_name>/`。
+`actions.json` 是 runtime action contract，用于声明可自动执行的任务模板。当前已覆盖：
 
-每个 skill 至少包含：
+- `xlsx/export_pdf`
+- `pdf/merge_pdfs`
+- `pdf/extract_pages`
+- `pdf/rotate_pages`
+- `docx/accept_tracked_changes`
 
-```text
-SKILL.md
-```
+详细说明见 [miniagent_core/skills/README.md](miniagent_core/skills/README.md)。
 
-可选包含：
+## Memory
 
-```text
-reference.md
-forms.md
-scripts/
-```
-
-运行机制：
-
-1. `SkillScanner` 扫描 skill。
-2. `SkillRegistry` 注册 skill 元数据。
-3. `SkillRouter` 根据用户消息和附件路由 skill。
-4. `SkillLoader` 只按需注入命中的 `SKILL.md`。
-5. 模型如需执行脚本，统一调用 `run_skill_script`。
-6. `SkillRuntime` 校验路径、执行脚本、记录 trace。
-
-### 3. Memory System
-
-Memory 分为三层：
+Memory 分三层：
 
 - `workspace/sessions/*.jsonl`：短期会话原始记录。
-- `workspace/memory/history.jsonl`：每次 consolidation 的历史摘要日志。
-- `workspace/memory/memory_store.jsonl`：长期记忆主库和检索唯一事实源。
+- `workspace/memory/history.jsonl`：consolidation 历史摘要。
+- `workspace/memory/memory_store.jsonl`：长期记忆唯一检索主库。
 
-检索流程：
+`MEMORY.md` 是由 `memory_store.jsonl` 渲染的人类可读视图，不是权威事实源。
 
-1. 当前 query 生成 embedding。
-2. 从 `memory_store.jsonl` 读取 active memory items。
-3. 使用预存 embedding 做相似度召回。
-4. 结合关键词、topic、confidence 做 rerank。
-5. 注入 `# Relevant Memory` 到 prompt。
+详细说明见 [workspace/memory/README.md](workspace/memory/README.md)。
 
-### 4. Attachment / Outbox
+## Trace
 
-用户上传文件保存到：
+Live trace 默认写入：
 
 ```text
-workspace/inbox/<channel>/<sender>/<filename__hash>/
+workspace/traces/runtime_trace.jsonl
 ```
 
-Agent 生成结果保存到：
+Skill script trace 写入：
 
 ```text
-workspace/outbox/<session_key>/<filename__hash>/
+workspace/skills/skill_trace.jsonl
 ```
 
-文件处理原则：
+如果任务出错，优先看 `runtime_trace.jsonl` 中最近一轮的：
 
-- 不覆盖用户上传的 inbox 原始文件。
-- 结果统一写入 outbox。
-- 文件处理结果尽量通过真实二进制格式输出，例如 `.docx/.pdf/.xlsx`。
+```text
+turn_intent -> skill_activation -> llm_request -> llm_response -> tool_call/tool_result -> recovery_plan/violation -> turn_completed
+```
 
-## 当前支持的 Skill
+## Benchmarks
 
-| Skill | 说明 |
-| --- | --- |
-| `code_navigation` | 代码定位、文件查找、源码阅读辅助 |
-| `weather` | 天气查询，核心脚本 `scripts/query_weather.py` |
-| `xlsx` | Excel 读取、筛选、修改、公式重算 |
-| `pdf` | PDF 文本提取、表格提取、PDF 报告生成 |
-| `docx` | Word 文档读取、生成、修订处理、Office XML 校验 |
+任务集位于 `workspace/benchmarks/`：
 
+- `tasks.json`：端到端 Agent 任务。
+- `harness_flow_tasks.json`：逐步验证 harness 流程。
+- `memory_retrieval_tasks.json`：memory retrieval 评测。
 
+Agent eval 默认每个任务间隔 3 秒，降低 DashScope 连续请求触发 429 的概率；可用 `--delay 0` 关闭。
 
-
+详细说明见 [workspace/benchmarks/README.md](workspace/benchmarks/README.md)。
 

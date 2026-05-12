@@ -1,0 +1,3 @@
+MiniAgent 是一个 QQBot Agent 项目。
+核心能力包括文件接收、Office 文档处理、skill runtime 和长期记忆检索。
+当前重点是把能力系统化，而不是不断堆功能。

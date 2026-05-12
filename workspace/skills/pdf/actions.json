@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "name": "merge_pdfs",
+      "description": "Merge visible PDF files into one PDF in the current session outbox.",
+      "auto_execute": true,
+      "requires_output_file": true,
+      "intent_hints_any": ["合并", "拼接", "merge", "combine"],
+      "output_hints_any": ["pdf"],
+      "input_extensions": [".pdf"],
+      "input_mode": "all_matching",
+      "min_inputs": 2,
+      "output_extension": ".pdf",
+      "output_filename_template": "merged.pdf",
+      "tool": "run_skill_script",
+      "skill_name": "pdf",
+      "script_path": "scripts/pdf_ops.py",
+      "arguments": ["--operation", "merge", "--inputs", "{input_paths}", "--output", "{output_path}"],
+      "timeout_seconds": 60
+    },
+    {
+      "name": "extract_pages",
+      "description": "Extract selected pages from a visible PDF into a new PDF in the current session outbox.",
+      "auto_execute": true,
+      "requires_output_file": true,
+      "intent_hints_any": ["提取", "抽取", "截取", "导出", "extract"],
+      "output_hints_any": ["页", "page", "pdf"],
+      "input_extensions": [".pdf"],
+      "output_extension": ".pdf",
+      "output_filename_template": "{input_stem}_pages_{pages_slug}.pdf",
+      "variables": {
+        "pages": {
+          "regex": "(?:第|pages?\\s*)?([0-9]+(?:\\s*(?:-|,|，|、|到|至|~)\\s*[0-9]+)*)(?:\\s*(?:页|pages?))?",
+          "normalizer": "pages",
+          "required": true
+        }
+      },
+      "tool": "run_skill_script",
+      "skill_name": "pdf",
+      "script_path": "scripts/pdf_ops.py",
+      "arguments": ["--operation", "extract-pages", "--input", "{input_path}", "--pages", "{pages}", "--output", "{output_path}"],
+      "timeout_seconds": 60
+    },
+    {
+      "name": "rotate_pages",
+      "description": "Rotate selected or all pages of a visible PDF into a new PDF in the current session outbox.",
+      "auto_execute": true,
+      "requires_output_file": true,
+      "intent_hints_any": ["旋转", "转正", "rotate"],
+      "output_hints_any": ["pdf", "度", "°", "degrees"],
+      "input_extensions": [".pdf"],
+      "output_extension": ".pdf",
+      "output_filename_template": "{input_stem}_rotated_{angle}.pdf",
+      "variables": {
+        "pages": {
+          "regex": "(?:第|pages?\\s*)?([0-9]+(?:\\s*(?:-|,|，|、|到|至|~)\\s*[0-9]+)*)\\s*(?:页|pages?)",
+          "normalizer": "pages",
+          "default": "all"
+        },
+        "angle": {
+          "regex": "(-?[0-9]{2,3})\\s*(?:度|°|degrees?)",
+          "normalizer": "angle",
+          "default": "90"
+        }
+      },
+      "tool": "run_skill_script",
+      "skill_name": "pdf",
+      "script_path": "scripts/pdf_ops.py",
+      "arguments": ["--operation", "rotate", "--input", "{input_path}", "--pages", "{pages}", "--angle", "{angle}", "--output", "{output_path}"],
+      "timeout_seconds": 60
+    }
+  ]
+}

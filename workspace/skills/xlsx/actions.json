@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "actions": [
+    {
+      "name": "export_pdf",
+      "description": "Export a visible Excel workbook to a PDF file in the current session outbox.",
+      "auto_execute": true,
+      "requires_output_file": true,
+      "intent_hints_any": ["导出", "转", "转换", "保存为", "保存成", "export", "convert"],
+      "output_hints_any": ["pdf"],
+      "input_extensions": [".xlsx", ".xlsm"],
+      "output_extension": ".pdf",
+      "output_filename_template": "{input_stem}.pdf",
+      "tool": "run_skill_script",
+      "skill_name": "xlsx",
+      "script_path": "scripts/convert_to_pdf.py",
+      "arguments": ["{input_path}", "{output_path}"],
+      "timeout_seconds": 60
+    }
+  ]
+}

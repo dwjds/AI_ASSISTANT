@@ -1,0 +1,252 @@
+{
+  "tasks": [
+    {
+      "id": "chat_basic_math_no_tool",
+      "category": "chat",
+      "prompt": "请只回答：2+2等于多少？",
+      "expected_reply_contains": ["4"],
+      "expected_max_tool_calls": 0
+    },
+    {
+      "id": "chat_harness_short_explain",
+      "category": "chat",
+      "prompt": "用两句话说明 MiniAgent 的 harness 主要解决什么问题。",
+      "expected_reply_contains_any": ["trace", "追溯", "可追踪", "回放"]
+    },
+    {
+      "id": "chat_plain_style",
+      "category": "chat",
+      "prompt": "用自然聊天语气回答：如果你不确定文件内容，应该先做什么？",
+      "expected_reply_contains": ["读"]
+    },
+    {
+      "id": "txt_attachment_summary",
+      "category": "attachment",
+      "prompt": "总结这个文本文件的核心内容，输出3条要点。",
+      "attachments": [
+        {
+          "fixture": "miniagent_notes.txt",
+          "filename": "miniagent_notes.txt",
+          "content_type": "text/plain"
+        }
+      ],
+      "expected_reply_contains": ["MiniAgent"]
+    },
+    {
+      "id": "txt_attachment_grounded_question",
+      "category": "attachment",
+      "prompt": "这个文本文件有没有提到长期记忆检索？请先确认文件内容再回答。",
+      "attachments": [
+        {
+          "fixture": "miniagent_notes.txt",
+          "filename": "miniagent_notes.txt",
+          "content_type": "text/plain"
+        }
+      ],
+      "expected_reply_contains": ["长期记忆"]
+    },
+    {
+      "id": "txt_summary_to_md_outbox",
+      "category": "attachment_output",
+      "prompt": "读取这个文本文件，整理成一份 Markdown 摘要并保存。",
+      "attachments": [
+        {
+          "fixture": "miniagent_notes.txt",
+          "filename": "miniagent_notes.txt",
+          "content_type": "text/plain"
+        }
+      ],
+      "expected_tools_any": ["save_outbox_file"],
+      "expected_outbox_suffixes": [".md"],
+      "expected_outbox_files": [
+        {
+          "suffix": ".md",
+          "contains_all": ["MiniAgent", "长期记忆"]
+        }
+      ]
+    },
+    {
+      "id": "txt_to_docx_report",
+      "category": "docx",
+      "prompt": "把这个文本文件整理成一份 Word 文档保存，标题为 MiniAgent Notes。",
+      "attachments": [
+        {
+          "fixture": "miniagent_notes.txt",
+          "filename": "miniagent_notes.txt",
+          "content_type": "text/plain"
+        }
+      ],
+      "expected_tools_any": ["save_outbox_file"],
+      "expected_outbox_suffixes": [".docx"],
+      "expected_outbox_files": [
+        {
+          "suffix": ".docx",
+          "contains_all": ["MiniAgent Notes", "MiniAgent"]
+        }
+      ]
+    },
+    {
+      "id": "txt_to_pdf_report",
+      "category": "pdf",
+      "prompt": "把这个文本文件整理成一份 PDF 报告保存，标题为 MiniAgent Notes。",
+      "attachments": [
+        {
+          "fixture": "miniagent_notes.txt",
+          "filename": "miniagent_notes.txt",
+          "content_type": "text/plain"
+        }
+      ],
+      "expected_tools_any": ["save_outbox_file", "run_skill_script"],
+      "expected_outbox_suffixes": [".pdf"],
+      "expected_outbox_files": [
+        {
+          "suffix": ".pdf",
+          "contains_all": ["MiniAgent Notes", "MiniAgent"]
+        }
+      ]
+    },
+    {
+      "id": "xlsx_attachment_summary",
+      "category": "xlsx",
+      "prompt": "读取这个 Excel，说明有几类项目，并点名其中一个 AI 相关项目。",
+      "attachments": [
+        {
+          "fixture": "research_projects.xlsx",
+          "filename": "research_projects.xlsx",
+          "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+      ],
+      "expected_reply_contains": ["AI"]
+    },
+    {
+      "id": "xlsx_filter_to_outbox",
+      "category": "xlsx",
+      "prompt": "筛选这个 Excel 中专业包含软件工程且研究内容包含 AI 或大模型的项目，保存为新的 Excel 文件。",
+      "attachments": [
+        {
+          "fixture": "research_projects.xlsx",
+          "filename": "research_projects.xlsx",
+          "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+      ],
+      "expected_tools_any": ["run_skill_script", "save_outbox_file"],
+      "expected_outbox_suffixes": [".xlsx"],
+      "expected_outbox_files": [
+        {
+          "suffix": ".xlsx",
+          "contains_all": ["AI 代码审查平台", "车载 LLM 安全"],
+          "not_contains": ["传感器结构设计"],
+          "min_rows": 3,
+          "max_rows": 4
+        }
+      ]
+    },
+    {
+      "id": "xlsx_export_pdf_action",
+      "category": "xlsx_action",
+      "prompt": "把这个 Excel 导出为 PDF 保存。",
+      "attachments": [
+        {
+          "fixture": "research_projects.xlsx",
+          "filename": "research_projects.xlsx",
+          "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+      ],
+      "expected_tools_any": ["run_skill_script"],
+      "expected_outbox_suffixes": [".pdf"]
+    },
+    {
+      "id": "xlsx_create_table_outbox",
+      "category": "xlsx",
+      "prompt": "生成一个 Excel 文件保存，表格包含三列：Task、Owner、Status；三行分别是 Trace、Skill、Memory。",
+      "expected_tools_any": ["save_outbox_file"],
+      "expected_outbox_suffixes": [".xlsx"],
+      "expected_outbox_files": [
+        {
+          "suffix": ".xlsx",
+          "contains_all": ["Trace", "Skill", "Memory"],
+          "min_rows": 4
+        }
+      ]
+    },
+    {
+      "id": "docx_generate_project_brief",
+      "category": "docx",
+      "prompt": "生成一份 Word 文档保存，标题为 MiniAgent Benchmark，内容包括一段项目简介。",
+      "expected_tools_any": ["save_outbox_file", "run_skill_script"],
+      "expected_outbox_suffixes": [".docx"],
+      "expected_outbox_files": [
+        {
+          "suffix": ".docx",
+          "contains_all": ["MiniAgent Benchmark", "项目简介"]
+        }
+      ]
+    },
+    {
+      "id": "docx_generate_checklist",
+      "category": "docx",
+      "prompt": "生成一份 Word 检查清单保存，标题为 Runtime Gate Checklist，内容包含 file grounding、output artifact、script gate。",
+      "expected_tools_any": ["save_outbox_file", "run_skill_script"],
+      "expected_outbox_suffixes": [".docx"],
+      "expected_outbox_files": [
+        {
+          "suffix": ".docx",
+          "contains_all": ["Runtime Gate Checklist", "file grounding", "output artifact", "script gate"]
+        }
+      ]
+    },
+    {
+      "id": "pdf_generate_project_brief",
+      "category": "pdf",
+      "prompt": "生成一份 PDF 报告保存，标题为 MiniAgent Benchmark，内容包括一段项目简介。",
+      "expected_tools_any": ["save_outbox_file", "run_skill_script"],
+      "expected_outbox_suffixes": [".pdf"],
+      "expected_outbox_files": [
+        {
+          "suffix": ".pdf",
+          "contains_all": ["MiniAgent Benchmark", "项目简介"]
+        }
+      ]
+    },
+    {
+      "id": "pdf_generate_runtime_gate_report",
+      "category": "pdf",
+      "prompt": "生成一份 PDF 保存，标题为 Runtime Gate Report，内容说明 file grounding、output violation、script_tool_violation。",
+      "expected_tools_any": ["save_outbox_file", "run_skill_script"],
+      "expected_outbox_suffixes": [".pdf"],
+      "expected_outbox_files": [
+        {
+          "suffix": ".pdf",
+          "contains_all": ["Runtime Gate Report", "file grounding", "output violation"]
+        }
+      ]
+    },
+    {
+      "id": "weather_script_query",
+      "category": "weather",
+      "prompt": "今天武汉天气怎么样？请用真实天气工具查询后简短回答。",
+      "expected_reply_contains": ["武汉"],
+      "expected_tools_any": ["run_skill_script"]
+    },
+    {
+      "id": "code_navigation_find_agent_loop",
+      "category": "code_navigation",
+      "prompt": "在项目代码里找到 agent_loop 的定义位置，并说明它负责什么。",
+      "expected_reply_contains": ["agent_loop"],
+      "expected_tools_any": ["search_code", "read_file"]
+    },
+    {
+      "id": "code_navigation_find_harness",
+      "category": "code_navigation",
+      "prompt": "在项目代码里找到 MiniAgentHarness 的定义位置，并说明它和 runtime trace 的关系。",
+      "expected_reply_contains": ["MiniAgentHarness"],
+      "expected_tools_any": ["search_code", "read_file"]
+    },
+    {
+      "id": "outbox_list_current_session",
+      "category": "tooling",
+      "prompt": "列出当前会话已经生成的 outbox 文件；如果没有，也请明确说明。",
+      "expected_tools_any": ["list_outbox_files"]
+    }
+  ]
+}
